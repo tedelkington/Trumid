@@ -23,7 +23,7 @@ public final class KafkaProperties {
 
     public static Properties castSubProperties(String groupId, int instanceId) {
         final Properties properties = new Properties();
-        properties.put(APPLICATION_SERVER_CONFIG, applicationServer(instanceId));
+        properties.put(APPLICATION_SERVER_CONFIG, applicationServer(instanceId)); // don't need this here now
         properties.put(APPLICATION_ID_CONFIG, groupId + instanceId);
         properties.put(BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
         properties.put(KEY_DESERIALIZER_CLASS_CONFIG, CastKeyDeserializer.class);
@@ -46,8 +46,10 @@ public final class KafkaProperties {
         properties.put(APPLICATION_SERVER_CONFIG, applicationServer(instanceId));
         properties.put(APPLICATION_ID_CONFIG, groupId + instanceId);
         properties.put(BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
-        properties.put(KEY_DESERIALIZER_CLASS_CONFIG, IntegerDeserializer.class);
+        properties.put(KEY_DESERIALIZER_CLASS_CONFIG, CastKeyDeserializer.class);
         properties.put(VALUE_DESERIALIZER_CLASS_CONFIG, CastDeserializer.class);
+        properties.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, CastKeySerde.class);
+        properties.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, CastSerde.class);
         properties.put(GROUP_ID_CONFIG, groupId);
         properties.put(ENABLE_AUTO_COMMIT_CONFIG, true);
         return properties;
@@ -56,8 +58,10 @@ public final class KafkaProperties {
     public static Properties targetedCastPubProperties() {
         final Properties properties = new Properties();
         properties.put(BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
-        properties.put(KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
+        properties.put(KEY_SERIALIZER_CLASS_CONFIG, CastKeySerializer.class);
         properties.put(VALUE_SERIALIZER_CLASS_CONFIG, CastSerializer.class);
+        properties.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, CastKeySerde.class);
+        properties.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, CastSerde.class);
         return properties;
     }
 

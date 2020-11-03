@@ -77,20 +77,26 @@ public final class Client implements ClientMBean {
 
     @Override
     public String getActiveCasts(int targetUserId) {
-        log.info("Sending getActiveCasts for {}", targetUserId);
-        selects.send(new ProducerRecord<>(ActiveCasts.name(), targetUserId, targetUserId));
-        return "Success"; // TODO ok yep i should be req reply
+        final int requestId = messageId++;
+        log.info("Sending getActiveCasts for {} requestId {}", targetUserId, requestId);
+        selects.send(new ProducerRecord<>(ActiveCasts.name(), targetUserId, requestId));
+
+        return waitForReply(requestId, 3);
     }
 
-    // TODO this is cr@p I realize
     private String sendCommand(CastKey castKey, Command command) {
         final int requestId = messageId++;
         final CommandEvent event = new CommandEvent(castKey, command);
         log.info("Sending {} is {}", event, requestId);
         commands.send(new ProducerRecord<>(Commands.name(), requestId, event));
 
+        return waitForReply(requestId, 1);
+    }
+
+    // TODO this is cr@p I realize
+    private String waitForReply(int requestId, int timeoutSeconds) {
         try {
-            Thread.sleep(500);
+            Thread.sleep(timeoutSeconds * 1000);
         } catch (InterruptedException e) {
             log.error("Interrupted", e);
         }
@@ -104,6 +110,8 @@ public final class Client implements ClientMBean {
         return reply.get();
     }
 
+    public static final int TARGETED_PARTITIONS = 10;
+
     public static void main(String[] args) {
         try {
             final Properties properties = new Properties();
@@ -116,11 +124,11 @@ public final class Client implements ClientMBean {
                     new NewTopic(Casts.name(), 3, noReplication),
                     new NewTopic(Commands.name(), 1, noReplication),
                     new NewTopic(Reply.name(), 1, noReplication),
-                    new NewTopic(TargetedCasts.name(), 10, noReplication));
+                    new NewTopic(TargetedCasts.name(), TARGETED_PARTITIONS, noReplication));
 
             admin.createTopics(topics);
 
-            final ObjectName objectName = new ObjectName("com.trumid.cast:type=update,name=castService");
+            final ObjectName objectName = new ObjectName("com.trumid.cast:name=castService");
             final Client client = new Client();
             getPlatformMBeanServer().registerMBean(client, objectName);
 

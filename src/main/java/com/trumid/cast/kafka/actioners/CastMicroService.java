@@ -5,28 +5,20 @@ import com.trumid.cast.data.CastKey;
 import com.trumid.cast.kafka.config.CastPartitioner;
 import com.trumid.cast.kafka.config.InstanceGroup;
 import com.trumid.cast.kafka.events.CommandEvent;
-import com.trumid.cast.kafka.serialize.CastKeySerde;
-import com.trumid.cast.kafka.serialize.CastSerde;
-import com.trumid.cast.kafka.serialize.ActiveCastSerde;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KTable;
-import org.apache.kafka.streams.kstream.Materialized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.trumid.cast.client.Client.TARGETED_PARTITIONS;
 import static com.trumid.cast.contract.CastStatus.Active;
 import static com.trumid.cast.contract.CastStatus.Canceled;
 import static com.trumid.cast.kafka.config.Command.Activate;
@@ -34,8 +26,6 @@ import static com.trumid.cast.kafka.config.KafkaProperties.*;
 import static com.trumid.cast.kafka.config.Topics.*;
 import static java.time.Duration.ofMillis;
 import static java.util.Arrays.asList;
-import static org.apache.kafka.streams.StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG;
-import static org.apache.kafka.streams.StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG;
 
 /**
  * Consumes a partition from {@link com.trumid.cast.kafka.config.Topics#Casts} and marks those as
@@ -51,29 +41,15 @@ public final class CastMicroService {
     private final InstanceGroup instanceGroup = new InstanceGroup();
     private final Map<CastKey, Cast> cache = new HashMap<>();
     private final CastPartitioner partitioner = new CastPartitioner();
-    private final Producer<Integer, Cast> targetedCasts = new KafkaProducer<>(targetedCastPubProperties());
+    private final Producer<CastKey, Cast> targetedCasts = new KafkaProducer<>(targetedCastPubProperties());
     private final Consumer<CastKey, Cast> casts;
     private final Consumer<Integer, CommandEvent> commands;
     private final Producer<Integer, String> replies;
-    private final Consumer<Integer, Integer> active;
-//    private final GlobalKTable<CastKey, Cast> globalCasts;
 
     public CastMicroService() {
         casts = new KafkaConsumer<>(castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId));
         commands = new KafkaConsumer<>(commandSubProperties("CommandConsumer-" + instanceGroup.instanceId));
         replies = new KafkaProducer<>(replyPubProperties());
-        active = new KafkaConsumer<>(activeSubProperties("SelectConsumer-" + instanceGroup.instanceId));
-
-//        final StreamsBuilder builder = new StreamsBuilder();
-//        globalCasts = builder.globalTable(
-//                Casts.name(),
-//                Materialized.<CastKey, Cast, KeyValueStore<Bytes, byte[]>>as("casts-global-store")
-//                        .withKeySerde(new CastKeySerde())
-//                        .withValueSerde(new CastSerde())
-//        );
-//
-//        final KafkaStreams streams = new KafkaStreams(builder.build(), castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId));
-//        streams.start();
     }
 
     public void start() {
@@ -82,7 +58,6 @@ public final class CastMicroService {
         // I've gone for explicit partition specification, rather than pattern sub - on the basis failover (when added) would be simpler
         casts.assign(asList(new TopicPartition(Casts.name(), instanceGroup.instanceId)));
         commands.subscribe(asList(Commands.name()));
-        active.subscribe(asList(ActiveCasts.name()));
 
         while (stayAlive.get()) {
             casts.poll(ofMillis(100)).forEach(record -> {
@@ -139,54 +114,20 @@ public final class CastMicroService {
                         replyError(requestId, "Unhandled command received " + event + " for request " + requestId);
                 }
             });
-
-            active.poll(ofMillis(100)).forEach(record -> {
-
-                final Integer targetUserId = record.key();
-                if (instanceGroup.isMine(targetUserId)) {
-
-                    final StreamsBuilder builder = new StreamsBuilder();
-                    final KStream<CastKey, Cast> stream = builder.stream(Casts.name());
-                    final KTable<CastKey, ActiveCast> activeCasts = stream
-                            .filter((castKey, cast) -> cast.isForTargetUserId(targetUserId))
-                            .filter((castKey, cast) -> Active == cast.status())
-                            .groupByKey().aggregate(
-                                    () -> new ActiveCast(),
-                                    (castKey, cast, aggregate) -> {
-                                        log.info("Aggregating {} {}", castKey, cast.toStringFull());
-                                        aggregate.activeCast(cast);
-                                        return aggregate; },
-                                    Materialized.with(new CastKeySerde(), new ActiveCastSerde()));
-
-                    final Properties properties = castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId);
-                    properties.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, CastKeySerde.class);
-                    properties.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, CastSerde.class);
-                    final KafkaStreams streams = new KafkaStreams(builder.build(), properties);
-                    streams.start();
-
-                    activeCasts.toStream().foreach((k, c) ->
-                            log.info("targetUserId={} has active cast {}", targetUserId, c.activeCast().toStringFull()));
-
-                    streams.close();
-
-                } else {
-                    log.info("Skipping select for targetUserId {}", targetUserId);
-                }
-            });
         }
 
         targetedCasts.close();
         casts.close();
         replies.close();
         commands.close();
-        active.close();
     }
 
     private void sendTargetedCast(Cast cast) {
         for (int i = 0; i < cast.targetUserIds().length; i++) {
             final int targetUserId = cast.targetUserIds()[i];
-            targetedCasts.send(new ProducerRecord<>(TargetedCasts.name(), targetUserId, cast));
-            log.info("Publishing {} key {} {}", TargetedCasts.name(), targetUserId, cast.toStringFull());
+            final int partition = targetUserId % TARGETED_PARTITIONS;
+            targetedCasts.send(new ProducerRecord<>(TargetedCasts.name(), partition, cast.key, cast));
+            log.info("Publishing {} key {} partition {}", TargetedCasts.name(), targetUserId, partition, cast.toStringFull());
         }
     }
 
@@ -199,11 +140,12 @@ public final class CastMicroService {
     }
 
     private void replySuccess(int requestId) {
+        log.info("Sending success reply for {}", requestId);
         replies.send(new ProducerRecord<>(Reply.name(), requestId, "Success"));
     }
 
     private void replyError(int requestId, String message) {
-        log.error(message + ". Sending error reply for " + requestId);
+        log.error(message + ". Sending error reply for {}", requestId);
         replies.send(new ProducerRecord<>(Reply.name(), requestId, message));
     }
 

@@ -9,14 +9,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.trumid.cast.kafka.config.KafkaProperties.castSubProperties;
-import static com.trumid.cast.kafka.config.Topics.Casts;
+import static com.trumid.cast.kafka.config.KafkaProperties.targetedCastSubProperties;
 import static com.trumid.cast.kafka.config.Topics.TargetedCasts;
 import static java.lang.Runtime.getRuntime;
 import static java.time.Duration.ofMillis;
 import static java.util.Arrays.asList;
 
-/** Just an example/test main to consume targeted and untargeted casts {@link org.apache.kafka.common.internals.Topic} */
+/** Just an example/test main to consume targeted casts {@link com.trumid.cast.kafka.config.Topics#TargetedCasts} */
 public final class TargetedCastsConsumerRunner {
     private static final Logger log = LoggerFactory.getLogger(TargetedCastsConsumerRunner.class);
     private static final AtomicBoolean stayAlive = new AtomicBoolean(true);
@@ -27,8 +26,8 @@ public final class TargetedCastsConsumerRunner {
         getRuntime().addShutdownHook(new Thread(() -> stayAlive.set(false)));
 
         try {
-            final KafkaConsumer<CastKey, Cast> consumer = new KafkaConsumer<>(castSubProperties("on-my-own", 0));
-            consumer.subscribe(asList(Casts.name(), TargetedCasts.name()));
+            final KafkaConsumer<CastKey, Cast> consumer = new KafkaConsumer<>(targetedCastSubProperties("on-my-own", 0));
+            consumer.subscribe(asList(TargetedCasts.name()));
 
             while (stayAlive.get()) {
                 for (ConsumerRecord<CastKey, Cast> record : consumer.poll(ofMillis(100))) {

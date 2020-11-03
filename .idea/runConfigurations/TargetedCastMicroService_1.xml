@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="TargetedCastMicroService-1" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.trumid.cast.runners.TargetedCastMicroServiceRunner" />
+    <module name="Trumid.test" />
+    <option name="VM_PARAMETERS" value="-DinstanceId=1 -DnumberOfInstances=2" />
+    <extension name="coverage">
+      <pattern>
+        <option name="PATTERN" value="com.trumid.cast.runners.*" />
+        <option name="ENABLED" value="true" />
+      </pattern>
+    </extension>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
