@@ -43,12 +43,24 @@ public final class TargetedCastMicroService {
     private final Producer<Integer, String> replies;
     private final Consumer<Integer, Integer> active;
     private final Properties targetedProps;
+    private final KafkaStreams globalTableStream;
 
     public TargetedCastMicroService() {
         targetedProps = targetedCastSubProperties(TargetedCastMicroService.class.getSimpleName(), instanceGroup.instanceId);
         targetedCasts = new KafkaConsumer<>(targetedProps);
         replies = new KafkaProducer<>(replyPubProperties());
         active = new KafkaConsumer<>(activeSubProperties("SelectConsumer-" + instanceGroup.instanceId));
+
+        final StreamsBuilder builder = new StreamsBuilder();
+        builder.globalTable(
+                TargetedCasts.name(),
+                Materialized.<CastKey, Cast, KeyValueStore<Bytes, byte[]>>as("casts-global-store")
+                        .withKeySerde(new CastKeySerde())
+                        .withValueSerde(new CastSerde())
+        );
+
+        globalTableStream = new KafkaStreams(builder.build(), castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId));
+        globalTableStream.start();
     }
 
     public void start() {
@@ -62,7 +74,6 @@ public final class TargetedCastMicroService {
                 log.info("Received {} on partition {} {}", record.topic(), record.partition(), record.value().toStringFull());
             });
 
-            // OK - so kinda options (perhaps more) - these consumers can't consumer by explicit partition
             active.poll(ofMillis(100)).forEach(record -> {
 
                 final Integer targetUserId = record.key();
@@ -70,27 +81,14 @@ public final class TargetedCastMicroService {
 
                 if (instanceGroup.isMine(targetUserId)) {
 
-                    final StreamsBuilder builder = new StreamsBuilder();
-                    builder.globalTable(
-                            Casts.name(),
-                            Materialized.<CastKey, Cast, KeyValueStore<Bytes, byte[]>>as("casts-global-store")
-                                    .withKeySerde(new CastKeySerde())
-                                    .withValueSerde(new CastSerde())
-                    );
-
-                    final KafkaStreams streams = new KafkaStreams(builder.build(), castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId));
-                    streams.start();
-
-                    final ReadOnlyKeyValueStore<CastKey, Cast> store = streams.store(fromNameAndType("casts-global-store", keyValueStore()));
-                    final Map<CastKey, Cast> results = new HashMap<>(); // after all that we're back to a map ; )
+                    final ReadOnlyKeyValueStore<CastKey, Cast> store = globalTableStream.store(fromNameAndType("casts-global-store", keyValueStore()));
+                    final Map<CastKey, Cast> results = new HashMap<>();
                     store.all().forEachRemaining(kv -> {
                         if (kv.value.isForTargetUserId(targetUserId) && Active == kv.value.status()) {
                             log.info("Matched {} {}", kv.key, kv.value.toStringFull());
                             results.put(kv.key, kv.value);
                         }
                     });
-
-                    streams.close();
 
                     log.info("Sending success reply for {} {}", requestId, results);
                     replies.send(new ProducerRecord<>(Reply.name(), requestId, results.size() + " active"));
@@ -131,5 +129,6 @@ public final class TargetedCastMicroService {
         targetedCasts.close();
         replies.close();
         active.close();
+        globalTableStream.close();
     }
 }
