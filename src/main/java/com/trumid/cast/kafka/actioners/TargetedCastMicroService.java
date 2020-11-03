@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.trumid.cast.contract.CastStatus.Active;
 import static com.trumid.cast.kafka.config.KafkaProperties.*;
 import static com.trumid.cast.kafka.config.Topics.*;
 import static java.time.Duration.ofMillis;
@@ -83,7 +84,7 @@ public final class TargetedCastMicroService {
                     final ReadOnlyKeyValueStore<CastKey, Cast> store = streams.store(fromNameAndType("casts-global-store", keyValueStore()));
                     final Map<CastKey, Cast> results = new HashMap<>(); // after all that we're back to a map ; )
                     store.all().forEachRemaining(kv -> {
-                        if (kv.value.isForTargetUserId(targetUserId)) {
+                        if (kv.value.isForTargetUserId(targetUserId) && Active == kv.value.status()) {
                             log.info("Matched {} {}", kv.key, kv.value.toStringFull());
                             results.put(kv.key, kv.value);
                         }

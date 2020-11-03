@@ -14,6 +14,7 @@ repositories {
 dependencies {
     compile group: 'org.apache.kafka', name: 'kafka-clients', version: '2.6.0'
     compile group: 'org.apache.kafka', name: 'kafka-streams', version: '2.6.0'
+    compile group: 'org.glassfish.jersey.bundles', name: 'jaxrs-ri', version: '2.32'
 //    compile group: 'org.springframework.kafka', name: 'spring-kafka', version: '2.6.2'
     compile group: 'com.aol.simplereact', name: 'simple-react', version: '0.99.7.1'
     compile group: 'org.slf4j', name: 'slf4j-log4j12', version: '1.7.30'
