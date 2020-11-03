@@ -1,0 +1,24 @@
+plugins {
+    id 'java'
+}
+
+group 'com.trumid.cast'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile group: 'org.apache.kafka', name: 'kafka-clients', version: '2.6.0'
+    compile group: 'org.apache.kafka', name: 'kafka-streams', version: '2.6.0'
+//    compile group: 'org.springframework.kafka', name: 'spring-kafka', version: '2.6.2'
+    compile group: 'com.aol.simplereact', name: 'simple-react', version: '0.99.7.1'
+    compile group: 'org.slf4j', name: 'slf4j-log4j12', version: '1.7.30'
+
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testCompile group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.7.0'
+    testCompile group: 'org.apache.kafka', name: 'kafka-streams-test-utils', version: '2.6.0'
+}
