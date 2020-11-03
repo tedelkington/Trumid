@@ -4,6 +4,7 @@ import com.trumid.cast.contract.CastStatus;
 import com.trumid.cast.contract.Side;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static com.trumid.cast.contract.CastStatus.Undefined;
@@ -58,6 +59,12 @@ public final class Cast {
     public Cast targetUserIds(int...targetUserIds) {
         this.targetUserIds.clear();
         stream(targetUserIds).forEach(this.targetUserIds::add);
+        return this;
+    }
+
+    public Cast targetUserIds(List<Integer> targetUserIds) {
+        this.targetUserIds.clear();
+        targetUserIds.forEach(this.targetUserIds::add);
         return this;
     }
 

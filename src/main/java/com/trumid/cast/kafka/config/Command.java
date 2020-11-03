@@ -7,6 +7,7 @@ import static java.util.stream.Collectors.toMap;
 
 public enum Command {
     Activate,
+    Target,
     Cancel;
 
     private final static Map<Integer, Command> values = stream(values()).collect(toMap(Enum::ordinal, value -> value));

@@ -11,8 +11,8 @@ public final class CastKeyDeserializer implements Deserializer<CastKey> {
     private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[MAX_SIZE]);
 
     @Override
-    public CastKey deserialize(String topic, byte[] data) {
-        buffer.wrap(data);
+    public CastKey deserialize(String topic, byte[] bytes) {
+        buffer.wrap(bytes);
         return new CastKey(buffer.getInt(ORIGINATOR_POSITION), buffer.getInt(BOND_POSITION), fromFix(buffer.getInt(SIDE_POSITION)));
     }
 }

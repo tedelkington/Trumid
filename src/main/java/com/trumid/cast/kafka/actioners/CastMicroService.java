@@ -5,6 +5,7 @@ import com.trumid.cast.data.CastKey;
 import com.trumid.cast.kafka.config.CastPartitioner;
 import com.trumid.cast.kafka.config.InstanceGroup;
 import com.trumid.cast.kafka.events.CommandEvent;
+import com.trumid.cast.kafka.events.TargetEvent;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -44,11 +45,13 @@ public final class CastMicroService {
     private final Producer<CastKey, Cast> targetedCasts = new KafkaProducer<>(targetedCastPubProperties());
     private final Consumer<CastKey, Cast> casts;
     private final Consumer<Integer, CommandEvent> commands;
+    private final Consumer<Integer, TargetEvent> target;
     private final Producer<Integer, String> replies;
 
     public CastMicroService() {
         casts = new KafkaConsumer<>(castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId));
         commands = new KafkaConsumer<>(commandSubProperties("CommandConsumer-" + instanceGroup.instanceId));
+        target = new KafkaConsumer<>(targetSubProperties("CommandConsumer-" + instanceGroup.instanceId));
         replies = new KafkaProducer<>(replyPubProperties());
     }
 
@@ -74,7 +77,7 @@ public final class CastMicroService {
             commands.poll(ofMillis(100)).forEach(record -> {
                 final Integer requestId = record.key();
                 final CommandEvent event = record.value();
-                if (! isCommandForMyOriginators(event)) {
+                if (! isCommandForMyOriginators(event.key)) {
                     log.info("Skipping {} for {}", event, requestId);
                     return;
                 }
@@ -114,12 +117,41 @@ public final class CastMicroService {
                         replyError(requestId, "Unhandled command received " + event + " for request " + requestId);
                 }
             });
+
+            target.poll(ofMillis(100)).forEach(record -> {
+                final Integer requestId = record.key();
+                final TargetEvent event = record.value();
+                if (!isCommandForMyOriginators(event.key)) {
+                    log.info("Skipping {} for {}", event, requestId);
+                    return;
+                }
+
+                log.info("Processing {} for {}", event, requestId);
+                if (! cache.containsKey(event.key)) {
+                    replyError(requestId, Target.name() + " received for non-existent cast");
+                    return;
+                }
+
+                // personally I think we should reject sendCast if the cast is already active - the contract is then that
+                // the caller would cancel first and then active with a different list of targets...it's simpler, gets more work
+                // out of cancelCast (ie exercises that path, which is a good thing) and avoids the error case of mistakenly
+                // activating twice...ie a "copy paste" type error where they meant to activate a new cast but send a cmd for the previous
+                final Cast cast = cache.get(event.key);
+                if (Active == cast.status()) {
+                    replyError(requestId, Activate.name() + " cannot sendCast on already Active cast - cancel first");
+                    return;
+                }
+
+                cast.targetUserIds(event.targetUserIds);
+                sendTargetedCast(cast);
+            });
         }
 
         targetedCasts.close();
         casts.close();
         replies.close();
         commands.close();
+        target.close();
     }
 
     private void sendTargetedCast(Cast cast) {
@@ -131,8 +163,8 @@ public final class CastMicroService {
         }
     }
 
-    private boolean isCommandForMyOriginators(CommandEvent event) {
-        return partitioner.isForInstance(instanceGroup.instanceId, event.key);
+    private boolean isCommandForMyOriginators(CastKey key) {
+        return partitioner.isForInstance(instanceGroup.instanceId, key);
     }
 
     private boolean isAlreadyActive(CastKey key) {

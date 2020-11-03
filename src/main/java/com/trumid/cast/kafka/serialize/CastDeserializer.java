@@ -13,8 +13,8 @@ public final class CastDeserializer implements Deserializer<Cast> {
     private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[MAX_SIZE]);
 
     @Override
-    public Cast deserialize(String topic, byte[] data) {
-        buffer.wrap(data);
+    public Cast deserialize(String topic, byte[] bytes) {
+        buffer.wrap(bytes);
 
         final Cast cast = new Cast(buffer.getInt(ORIGINATOR_POSITION), buffer.getInt(BOND_POSITION), fromFix(buffer.getInt(SIDE_POSITION)));
         cast.price(buffer.getLong(PRICE_POSITION))

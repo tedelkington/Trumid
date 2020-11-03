@@ -4,6 +4,7 @@ import com.trumid.cast.contract.Side;
 import com.trumid.cast.data.CastKey;
 import com.trumid.cast.kafka.config.Command;
 import com.trumid.cast.kafka.events.CommandEvent;
+import com.trumid.cast.kafka.events.TargetEvent;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -21,6 +22,7 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static com.trumid.cast.kafka.config.Command.Activate;
 import static com.trumid.cast.kafka.config.Command.Cancel;
@@ -29,6 +31,7 @@ import static com.trumid.cast.kafka.config.Topics.*;
 import static java.lang.management.ManagementFactory.getPlatformMBeanServer;
 import static java.time.Duration.ofMillis;
 import static java.util.Arrays.asList;
+import static java.util.Arrays.stream;
 import static org.apache.kafka.streams.StreamsConfig.BOOTSTRAP_SERVERS_CONFIG;
 
 /**
@@ -47,6 +50,7 @@ public final class Client implements ClientMBean {
 
     private final Map<Integer, String> cache = new ConcurrentHashMap<>();
     private final Producer<Integer, CommandEvent> commands = new KafkaProducer<>(commandPubProperties());
+    private final Producer<Integer, TargetEvent> targets = new KafkaProducer<>(targetPubProperties());
     private final Producer<Integer, Integer> selects = new KafkaProducer<>(activePubProperties());
     private final Consumer<Integer, String> replies = new KafkaConsumer<>(replySubProperties());
 
@@ -67,6 +71,24 @@ public final class Client implements ClientMBean {
     public String sendCast(int originatorUserId, int bondId, int side) {
         final CastKey key = new CastKey(originatorUserId, bondId, Side.fromFix(side));
         return sendCommand(key, Activate);
+    }
+
+    @Override
+    public String sendCast(int originatorUserId, int bondId, int side, String targetedUserIdsString) {
+        // personally i would have this reject if the cast is already active - the contract is then that
+        // the caller would cancel first and then active with a different list of targets...it's simpler, gets more work
+        // out of cancelCast (ie exercises that path, which is a good thing) and avoids the error case of mistakenly
+        // activating twice...ie a "copy paste" type error where they meant to activate a new cast but send a cmd for the previous
+        final CastKey key = new CastKey(originatorUserId, bondId, Side.fromFix(side));
+        final List<Integer> targetUserIds = stream(targetedUserIdsString.split(","))
+                .map(targetUserId -> Integer.valueOf(targetUserId.trim()))
+                .collect(Collectors.toList());
+
+        final int requestId = messageId++;
+        log.info("Sending sendCast for {} requestId {} requestId {}", key, targetUserIds, requestId);
+        targets.send(new ProducerRecord<>(Target.name(), requestId, new TargetEvent(key, targetUserIds)));
+
+        return waitForReply(requestId, 3);
     }
 
     @Override

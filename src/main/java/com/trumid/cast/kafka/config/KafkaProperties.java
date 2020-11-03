@@ -83,6 +83,24 @@ public final class KafkaProperties {
         return properties;
     }
 
+    public static Properties targetSubProperties(String commandSubscriber) {
+        final Properties properties = new Properties();
+        properties.put(BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
+        properties.put(KEY_DESERIALIZER_CLASS_CONFIG, IntegerDeserializer.class);
+        properties.put(VALUE_DESERIALIZER_CLASS_CONFIG, TargetDeserializer.class);
+        properties.put(GROUP_ID_CONFIG, commandSubscriber);
+        properties.put(ENABLE_AUTO_COMMIT_CONFIG, true);
+        return properties;
+    }
+
+    public static Properties targetPubProperties() {
+        final Properties properties = new Properties();
+        properties.put(BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
+        properties.put(KEY_SERIALIZER_CLASS_CONFIG, IntegerSerializer.class);
+        properties.put(VALUE_SERIALIZER_CLASS_CONFIG, TargetSerializer.class);
+        return properties;
+    }
+
     public static Properties replySubProperties() {
         final Properties properties = new Properties();
         properties.put(BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
