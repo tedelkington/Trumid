@@ -146,6 +146,7 @@ public final class Client implements ClientMBean {
                     new NewTopic(Casts.name(), 3, noReplication),
                     new NewTopic(Commands.name(), 1, noReplication),
                     new NewTopic(Reply.name(), 1, noReplication),
+                    new NewTopic(Target.name(), 1, noReplication),
                     new NewTopic(TargetedCasts.name(), TARGETED_PARTITIONS, noReplication));
 
             admin.createTopics(topics);

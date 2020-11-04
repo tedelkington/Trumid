@@ -51,7 +51,7 @@ public final class CastMicroService {
     public CastMicroService() {
         casts = new KafkaConsumer<>(castSubProperties(CastMicroService.class.getSimpleName(), instanceGroup.instanceId));
         commands = new KafkaConsumer<>(commandSubProperties("CommandConsumer-" + instanceGroup.instanceId));
-        target = new KafkaConsumer<>(targetSubProperties("CommandConsumer-" + instanceGroup.instanceId));
+        target = new KafkaConsumer<>(targetSubProperties("TargetConsumer-" + instanceGroup.instanceId));
         replies = new KafkaProducer<>(replyPubProperties());
     }
 
@@ -61,6 +61,7 @@ public final class CastMicroService {
         // I've gone for explicit partition specification, rather than pattern sub - on the basis failover (when added) would be simpler
         casts.assign(asList(new TopicPartition(Casts.name(), instanceGroup.instanceId)));
         commands.subscribe(asList(Commands.name()));
+        target.subscribe(asList(Target.name()));
 
         while (stayAlive.get()) {
             casts.poll(ofMillis(100)).forEach(record -> {
